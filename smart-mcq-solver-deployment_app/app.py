@@ -1,122 +1,89 @@
-
-import gradio as gr
-import torch
-from transformers import AutoTokenizer, AutoModelForMultipleChoice
-
-MODEL_PATH = "."
-
-OPTIONS = ["A", "B", "C", "D", "E"]
-
-STUDENT_NAME = "Abhishek Kumar"
-ROLL_NUMBER = "23F2004693"
-
-device = torch.device(
-    "cuda" if torch.cuda.is_available() else "cpu"
-)
-
-tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-
-model = AutoModelForMultipleChoice.from_pretrained(
-    MODEL_PATH
-)
-
-model.to(device)
-model.eval()
-
-
-def predict(question, option_a, option_b,
-            option_c, option_d, option_e):
-
-    choices = [
-        option_a,
-        option_b,
-        option_c,
-        option_d,
-        option_e
-    ]
-
-    if not question.strip():
-        return "Please enter a question."
-
-    if any(not str(x).strip() for x in choices):
-        return "Please enter all five options."
-
-    encoded = tokenizer(
-        [question] * 5,
-        choices,
-        truncation=True,
-        padding=True,
-        max_length=256,
-        return_tensors="pt"
-    )
-
-    encoded = {
-        key: value.unsqueeze(0).to(device)
-        for key, value in encoded.items()
-    }
-
-    with torch.no_grad():
-        output = model(**encoded)
-
-    probabilities = torch.softmax(
-        output.logits,
-        dim=1
-    )[0]
-
-    ranking = torch.argsort(
-        probabilities,
-        descending=True
-    ).tolist()
-
-    result = []
-
-    for rank, index in enumerate(ranking[:3], 1):
-
-        result.append(
-            f"{rank}. Option {OPTIONS[index]} - "
-            f"{choices[index]} "
-            f"({probabilities[index].item():.2%})"
-        )
-
-    return "\n".join(result)
-
-
-with gr.Blocks(title="Smart MCQ Solver") as demo:
+with gr.Blocks(
+    title="Smart MCQ Solver",
+    theme=gr.themes.Soft()
+) as demo:
 
     gr.Markdown(
         f"""
-# Smart MCQ Solver
+# 🧠 Smart MCQ Solver
+
+### AI-powered multiple choice answer ranking
 
 **Student Name:** {STUDENT_NAME}  
 **Roll Number:** {ROLL_NUMBER}
 
-Enter a question and five possible answers.
-The trained DeBERTa model will return its top-3 predictions.
+Enter a question and all five options below.  
+The model will rank the **top 3 answers** with confidence scores.
 """
     )
 
-    question = gr.Textbox(
-        label="Question",
-        lines=4
-    )
+    with gr.Row():
 
-    option_a = gr.Textbox(label="Option A")
-    option_b = gr.Textbox(label="Option B")
-    option_c = gr.Textbox(label="Option C")
-    option_d = gr.Textbox(label="Option D")
-    option_e = gr.Textbox(label="Option E")
+        with gr.Column(scale=2):
 
-    button = gr.Button(
-        "Predict Top 3 Answers"
-    )
+            question = gr.Textbox(
+                label="Question",
+                lines=5,
+                placeholder="Enter your question here..."
+            )
 
-    output = gr.Textbox(
-        label="Predictions",
-        lines=5
-    )
+            gr.Markdown("### Answer Options")
+
+            option_a = gr.Textbox(
+                label="Option A",
+                placeholder="Enter option A"
+            )
+
+            option_b = gr.Textbox(
+                label="Option B",
+                placeholder="Enter option B"
+            )
+
+            option_c = gr.Textbox(
+                label="Option C",
+                placeholder="Enter option C"
+            )
+
+            option_d = gr.Textbox(
+                label="Option D",
+                placeholder="Enter option D"
+            )
+
+            option_e = gr.Textbox(
+                label="Option E",
+                placeholder="Enter option E"
+            )
+
+            with gr.Row():
+
+                button = gr.Button(
+                    "🔍 Predict Top 3",
+                    variant="primary"
+                )
+
+                clear_button = gr.Button(
+                    "Clear"
+                )
+
+        with gr.Column(scale=1):
+
+            gr.Markdown(
+                """
+### Model Prediction
+
+The model ranks each option based on its learned probability.
+"""
+            )
+
+            output = gr.Textbox(
+                label="Top 3 Predictions",
+                lines=10,
+                interactive=False,
+                placeholder="Predictions will appear here..."
+            )
 
     button.click(
-        predict,
+        fn=predict,
         inputs=[
             question,
             option_a,
@@ -128,14 +95,29 @@ The trained DeBERTa model will return its top-3 predictions.
         outputs=output
     )
 
+    clear_button.click(
+        fn=lambda: ("", "", "", "", "", "", ""),
+        outputs=[
+            question,
+            option_a,
+            option_b,
+            option_c,
+            option_d,
+            option_e,
+            output
+        ]
+    )
+
     gr.Markdown(
         f"""
 ---
-Smart MCQ Solver  
-**{STUDENT_NAME} — {ROLL_NUMBER}**
+
+### About this project
+
+This application uses a fine-tuned **DeBERTa multiple-choice model**
+to rank answers for MCQ questions.
+
+**Student:** {STUDENT_NAME}  
+**Roll Number:** {ROLL_NUMBER}
 """
     )
-
-
-if __name__ == "__main__":
-    demo.launch()
